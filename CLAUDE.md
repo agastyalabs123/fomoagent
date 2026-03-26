@@ -4,9 +4,9 @@
 
 ## Read First
 
-- **Start with `deps/`** — read `deps/nanobot/README.md` and `deps/tinyfish/` to understand how nanobot and TinyFish work before doing anything else
+- **Start with `deps/`** — read `deps/nanobot/README.md` (openclaw reference) and `deps/tinyfish/` to understand how openclaw and TinyFish work before doing anything else
 - Check out `tinyfish-cookbook/README.md`
-- Check out `nanobot/README.md`
+- Check out `openclaw/README.md`
 - Check out `CONTEXT.md` (active task log and session handoff; update it at the end of each session)
 
 ---
@@ -15,10 +15,10 @@
 
 **Wait for the user to say they're ready before cloning anything.**
 
-### 1. nanobot — COMPULSORY (when user says to download)
+### 1. openclaw — COMPULSORY (when user says to download)
 
 ```bash
-git clone https://github.com/HKUDS/nanobot
+git clone https://github.com/openclaw/openclaw
 ```
 
 When the user says to download/setup, clone this repo, then help them through the full setup (install, onboard, config, Telegram bot, etc.).
@@ -36,7 +36,7 @@ git clone https://github.com/tinyfish-io/tinyfish-cookbook
 ## What This Project Is
 
 FomoFam Event Concierge is a Telegram-based personal AI agent for Web3 event participants.
-It uses **nanobot** (agent brain + memory + Telegram interface) and **TinyFish** (live web scraping API)
+It uses **openclaw** (agent brain + memory + Telegram interface) and **TinyFish** (live web scraping API)
 to help three types of users:
 
 - **Attendees** — find relevant Web3 hackathons and events
@@ -49,11 +49,11 @@ This is a **TinyFish Accelerator submission** — 3-day build, ship fast, demo-r
 
 ## Stack
 
-- **nanobot** — Python agent framework, installed via `pip install nanobot-ai`
+- **openclaw** — Python agent framework, installed via `pip install openclaw`
 - **TinyFish** — Browser agent API (`https://agent.tinyfish.ai/v1/automation/run-sse`)
-- **LLM provider** — Any supported provider via nanobot (Anthropic, OpenAI, Gemini, etc.)
-- **Telegram** — Primary user interface via nanobot channel
-- **Shell/bash** — TinyFish called via curl through nanobot's exec tool
+- **LLM provider** — Any supported provider via openclaw (Anthropic, OpenAI, Gemini, etc.)
+- **Telegram** — Primary user interface via openclaw channel
+- **Shell/bash** — TinyFish called via curl through openclaw's exec tool
 - **Markdown** — All skills, memory, and workspace files are .md
 
 ---
@@ -61,27 +61,27 @@ This is a **TinyFish Accelerator submission** — 3-day build, ship fast, demo-r
 ## Commands
 
 ```bash
-# Start the nanobot gateway (keeps running, processes Telegram messages)
-nanobot gateway
+# Start the openclaw gateway (keeps running, processes Telegram messages)
+openclaw gateway
 
 # Start with specific config (multi-instance)
-nanobot gateway --config ~/.nanobot/config.json
+openclaw gateway --config ~/.openclaw/config.json
 
 # Test agent directly in terminal (no Telegram needed)
-nanobot agent
+openclaw agent
 
 # Single message test
-nanobot agent -m "Find Web3 hackathons in India this month"
+openclaw agent -m "Find Web3 hackathons in India this month"
 
 # Check status
-nanobot status
+openclaw status
 
-# Check nanobot version
-nanobot --version
+# Check openclaw version
+openclaw --version
 
-# Install/reinstall nanobot
-pip install nanobot-ai
-pip install --upgrade nanobot-ai
+# Install/reinstall openclaw
+pip install openclaw
+pip install --upgrade openclaw
 ```
 
 ---
@@ -89,7 +89,7 @@ pip install --upgrade nanobot-ai
 ## Project File Structure
 
 ```
-~/.nanobot/
+~/.openclaw/
 ├── config.json                        ← DO NOT COMMIT — contains API keys
 └── workspace/
     ├── SOUL.md                        ← Agent personality (edit to change tone)
@@ -111,7 +111,7 @@ pip install --upgrade nanobot-ai
 
 ## Config Structure
 
-`~/.nanobot/config.json` must have:
+`~/.openclaw/config.json` must have:
 
 ```json
 {
@@ -123,7 +123,7 @@ pip install --upgrade nanobot-ai
   "agents": {
     "defaults": {
       "model": "anthropic/claude-opus-4-5",  // or "openai/gpt-4o", "gemini/gemini-2.0-flash", etc.
-      "workspace": "~/.nanobot/workspace"
+      "workspace": "~/.openclaw/workspace"
     }
   },
   "channels": {
@@ -145,7 +145,7 @@ export TINYFISH_API_KEY="your-tinyfish-key"
 export LLM_API_KEY="your-llm-provider-key"   # e.g. ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.
 ```
 
-These must be in the shell environment where `nanobot gateway` runs.
+These must be in the shell environment where `openclaw gateway` runs.
 TinyFish key is used inside the skill via `$TINYFISH_API_KEY`.
 The LLM key name depends on which provider you configure in `config.json`.
 
@@ -153,7 +153,7 @@ The LLM key name depends on which provider you configure in `config.json`.
 
 ## The TinyFish Skill (Core File)
 
-**Location:** `~/.nanobot/workspace/skills/tinyfish/SKILL.md`
+**Location:** `~/.openclaw/workspace/skills/tinyfish/SKILL.md`
 
 This is the most important file in the project. It teaches the agent:
 
@@ -186,9 +186,9 @@ Make it specific: include WHEN to use it, what user phrases trigger it.
 
 ---
 
-## nanobot Behavioral Rules
+## openclaw Behavioral Rules
 
-1. **Never manually edit MEMORY.md or HISTORY.md** — these are auto-managed by nanobot
+1. **Never manually edit MEMORY.md or HISTORY.md** — these are auto-managed by openclaw
 2. **HEARTBEAT.md** — add tasks here for periodic monitoring (checked every 30 min)
 3. **Skills are loaded on demand** — agent reads SKILL.md only when it decides it's relevant
 4. **exec tool runs shell commands** — TinyFish curl commands run through exec
@@ -250,7 +250,7 @@ Expected: Real results from live websites in under 60 seconds each.
 
 Before recording the demo:
 
-- [ ] `nanobot gateway` running without errors
+- [ ] `openclaw gateway` running without errors
 - [ ] Telegram bot responding to messages
 - [ ] `$TINYFISH_API_KEY` exported in shell
 - [ ] TinyFish skill file in correct location
@@ -265,7 +265,7 @@ Before recording the demo:
 - Do not build a custom API wrapper — skills + curl is sufficient
 - Do not use Google ADK — overkill for this scope
 - Do not add MCP server — skill file is faster for 3-day build
-- Do not touch nanobot source code — configure, don't modify
+- Do not touch openclaw source code — configure, don't modify
 - Do not commit config.json — it contains API keys
 - Do not overwrite MEMORY.md manually — let the agent manage it
 
@@ -276,9 +276,9 @@ Before recording the demo:
 **Agent not responding on Telegram:**
 
 ```bash
-nanobot status
+openclaw status
 # Check token and allowFrom in config.json
-# Make sure gateway is running: nanobot gateway
+# Make sure gateway is running: openclaw gateway
 ```
 
 **TinyFish returns empty:**
@@ -301,20 +301,20 @@ curl -X POST https://agent.tinyfish.ai/v1/automation/run-sse \
 
 **Memory getting too large:**
 
-- nanobot auto-consolidates — just let it run
+- openclaw auto-consolidates — just let it run
 - Force new session: send `/new` to the Telegram bot
 
 ## Future Plans
 
 ### Obsidian Integration — 10x Memory (Planned, Not Yet Built)
 
-**What:** Point nanobot's workspace directly at an Obsidian vault so every event
+**What:** Point openclaw's workspace directly at an Obsidian vault so every event
 scraped, grant discovered, and conversation held becomes a linked, searchable note
 inside Obsidian automatically.
 
 **Why it makes memory 10x better:**
 
-- Obsidian is just markdown files — nanobot already speaks markdown natively
+- Obsidian is just markdown files — openclaw already speaks markdown natively
 - Everything the agent learns shows up in Obsidian's graph view
 - Notes link together — grant notes link to event notes link to sponsor profiles
 - Full-text search across all agent memory via Obsidian
@@ -339,7 +339,7 @@ MEMORY.md, HISTORY.md, events/, grants/ — all appear inside Obsidian automatic
 
 ## VPS Deployment — Docker Setup
 
-When running on a VPS (DigitalOcean, Hetzner, AWS EC2, etc.), run nanobot inside Docker
+When running on a VPS (DigitalOcean, Hetzner, AWS EC2, etc.), run openclaw inside Docker
 so it is isolated, auto-restarts on crash, and survives VPS reboots.
 
 ---
@@ -349,9 +349,9 @@ so it is isolated, auto-restarts on crash, and survives VPS reboots.
 ```
 ~/fomofam-concierge/
 ├── .env                          ← API keys — NEVER commit this
-├── .gitignore                    ← must include .env and nanobot-data/
+├── .gitignore                    ← must include .env and openclaw-data/
 ├── docker-compose.yml            ← how to run the container
-├── config.json                   ← nanobot config (no hardcoded keys — uses .env vars)
+├── config.json                   ← openclaw config (no hardcoded keys — uses .env vars)
 └── workspace/
     ├── SOUL.md
     ├── AGENTS.md
@@ -385,7 +385,7 @@ Create `.gitignore` immediately:
 
 ```
 .env
-nanobot-data/
+openclaw-data/
 workspace/MEMORY.md
 workspace/HISTORY.md
 workspace/events/
@@ -396,7 +396,7 @@ workspace/grants/
 
 ### Step 2 — Create `config.json` (Zero Hardcoded Keys)
 
-nanobot reads `${VAR}` placeholders from environment automatically.
+openclaw reads `${VAR}` placeholders from environment automatically.
 
 ```json
 {
@@ -429,7 +429,7 @@ nanobot reads `${VAR}` placeholders from environment automatically.
 version: "3.9"
 
 services:
-  nanobot:
+  openclaw:
     image: python:3.12-slim
     container_name: fomofam-concierge
     restart: unless-stopped
@@ -439,10 +439,10 @@ services:
     volumes:
       # Workspace files (skills, soul, agents, user profile)
       - ./workspace:/workspace
-      # nanobot config
-      - ./config.json:/root/.nanobot/config.json
+      # openclaw config
+      - ./config.json:/root/.openclaw/config.json
       # Persist memory, sessions, history across restarts
-      - ./nanobot-data:/root/.nanobot
+      - ./openclaw-data:/root/.openclaw
 
     env_file:
       - .env
@@ -455,12 +455,12 @@ services:
 
     command: >
       bash -c "
-        pip install nanobot-ai --quiet &&
-        nanobot gateway --config /root/.nanobot/config.json
+        pip install openclaw --quiet &&
+        openclaw gateway --config /root/.openclaw/config.json
       "
 
     healthcheck:
-      test: ["CMD", "python3", "-c", "import nanobot"]
+      test: ["CMD", "python3", "-c", "import openclaw"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -499,10 +499,10 @@ Run this from your local machine:
 
 ```bash
 # Copy entire workspace
-scp -r ~/.nanobot/workspace/ user@your-vps-ip:~/fomofam-concierge/workspace/
+scp -r ~/.openclaw/workspace/ user@your-vps-ip:~/fomofam-concierge/workspace/
 
 # Or just the skill file
-scp ~/.nanobot/workspace/skills/tinyfish/SKILL.md \
+scp ~/.openclaw/workspace/skills/tinyfish/SKILL.md \
   user@your-vps-ip:~/fomofam-concierge/workspace/skills/tinyfish/SKILL.md
 ```
 
@@ -518,21 +518,21 @@ docker compose logs -f
 docker compose restart
 
 # Get a shell inside the running container
-docker compose exec nanobot bash
+docker compose exec openclaw bash
 
 # Verify all env vars loaded correctly inside container
-docker compose exec nanobot env | grep -E "ANTHROPIC|TINYFISH|TELEGRAM"
+docker compose exec openclaw env | grep -E "ANTHROPIC|TINYFISH|TELEGRAM"
 
 # Test TinyFish from inside container
-docker compose exec nanobot bash -c '
+docker compose exec openclaw bash -c '
   curl -s -X POST https://agent.tinyfish.ai/v1/automation/run-sse \
     -H "X-API-Key: $TINYFISH_API_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"url\": \"https://ethglobal.com/events\", \"goal\": \"List all events\"}"
 '
 
-# Force upgrade nanobot inside container
-docker compose exec nanobot pip install --upgrade nanobot-ai
+# Force upgrade openclaw inside container
+docker compose exec openclaw pip install --upgrade openclaw
 
 # Full rebuild (after major changes)
 docker compose down && docker compose up -d
@@ -562,9 +562,9 @@ docker compose up -d
 
 | Data                          | Location                             | Survives? |
 | ----------------------------- | ------------------------------------ | --------- |
-| MEMORY.md (agent memory)      | `./nanobot-data/workspace/memory/`   | ✅ Yes    |
-| HISTORY.md (conversation log) | `./nanobot-data/workspace/memory/`   | ✅ Yes    |
-| Sessions                      | `./nanobot-data/workspace/sessions/` | ✅ Yes    |
+| MEMORY.md (agent memory)      | `./openclaw-data/workspace/memory/`   | ✅ Yes    |
+| HISTORY.md (conversation log) | `./openclaw-data/workspace/memory/`   | ✅ Yes    |
+| Sessions                      | `./openclaw-data/workspace/sessions/` | ✅ Yes    |
 | Scraped events                | `./workspace/events/`                | ✅ Yes    |
 | Discovered grants             | `./workspace/grants/`                | ✅ Yes    |
 | Skills                        | `./workspace/skills/`                | ✅ Yes    |
@@ -586,9 +586,9 @@ docker compose up -d
 
 |                       | Local                    | VPS + Docker                           |
 | --------------------- | ------------------------ | -------------------------------------- |
-| Start                 | `nanobot gateway`        | `docker compose up -d`                 |
-| Config                | `~/.nanobot/config.json` | `./config.json` mounted via volume     |
-| Workspace             | `~/.nanobot/workspace/`  | `./workspace/` mounted to `/workspace` |
+| Start                 | `openclaw gateway`        | `docker compose up -d`                 |
+| Config                | `~/.openclaw/config.json` | `./config.json` mounted via volume     |
+| Workspace             | `~/.openclaw/workspace/`  | `./workspace/` mounted to `/workspace` |
 | API keys              | Exported in shell        | Loaded from `.env` file                |
 | Logs                  | Terminal                 | `docker compose logs -f`               |
 | Auto-restart on crash | ❌ No                    | ✅ Yes                                 |
