@@ -4,9 +4,34 @@
 
 ## Read First
 
+- **Start with `deps/`** — read `deps/nanobot/README.md` and `deps/tinyfish/` to understand how nanobot and TinyFish work before doing anything else
 - Check out `tinyfish-cookbook/README.md`
 - Check out `nanobot/README.md`
 - Check out `CONTEXT.md` (active task log and session handoff; update it at the end of each session)
+
+---
+
+## Downloading Dependencies (User-Triggered)
+
+**Wait for the user to say they're ready before cloning anything.**
+
+### 1. nanobot — COMPULSORY (when user says to download)
+
+```bash
+git clone https://github.com/HKUDS/nanobot
+```
+
+When the user says to download/setup, clone this repo, then help them through the full setup (install, onboard, config, Telegram bot, etc.).
+
+### 2. tinyfish-cookbook — OPTIONAL (only if user explicitly asks)
+
+The essentials are already available locally in `deps/tinyfish/`, so this is **not necessary** unless the user specifically wants the full cookbook repo.
+
+```bash
+git clone https://github.com/tinyfish-io/tinyfish-cookbook
+```
+
+---
 
 ## What This Project Is
 
