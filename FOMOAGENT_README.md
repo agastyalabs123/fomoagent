@@ -2,22 +2,31 @@
 
 `fomoagent` is an API-first agent runtime (JavaScript/Node.js) inspired by `nanobot`, focused on tool-calling workflows without channel adapters (Telegram/Slack/Discord).
 
+## Current Scope (Gemini-Only Build)
+
+- Single LLM provider: `gemini` only.
+- Gemini is called through the OpenAI-compatible endpoint.
+- OpenClaw Gemini hardening is ported into `src/providers/gemini.js`:
+  - base URL normalization
+  - tool schema sanitization for Gemini-incompatible JSON schema keywords
+  - turn-order fix (first non-system turn cannot be assistant)
+- No MCP integration in runtime/tools.
+
 ## What This Agent Can Do
 
 - Run LLM-driven multi-step tool loops with retries and streaming.
 - Persist sessions to disk and maintain long-term memory (`MEMORY.md`, `HISTORY.md`) with automatic consolidation.
 - Load skills from workspace `skills/*/SKILL.md` and inject them into system context.
-- Execute file tools, shell commands, web search/fetch, scheduling, background spawning, and MCP tool calls.
+- Execute file tools, shell commands, web search/fetch, scheduling, and background spawning.
 - Run recurring jobs via a persistent cron service (`cron/jobs.json`).
 - Run proactive periodic heartbeat checks from `HEARTBEAT.md`.
-- Support provider routing across OpenAI-compatible backends, Anthropic, and Azure OpenAI.
 - Expose API endpoints for chat, status, run lifecycle, cron operations, and heartbeat inspection.
 
 ## What It Does Not Include
 
 - No channel framework (no Telegram/Slack/Discord adapters).
-- No outbound channel manager/retry bus abstraction.
-- MCP stdio transport is not fully implemented yet (HTTP MCP call path is present).
+- No MCP tooling/transport in this codebase.
+- No multi-provider routing (Gemini-only by design).
 
 ## High-Level Architecture
 
@@ -28,18 +37,16 @@ flowchart LR
   loop --> context[ContextBuilder]
   loop --> runner[AgentRunner]
   loop --> tools[ToolRegistry]
-  runner --> provider[LLMProvider]
+  runner --> provider[GeminiProvider]
   tools --> fsTools[FilesystemTools]
   tools --> shellTool[ExecTool]
   tools --> webTools[WebTools]
   tools --> cronTool[CronTool]
   tools --> spawnTool[SpawnTool]
-  tools --> mcpTool[MCPTool]
   loop --> session[SessionManager]
   loop --> memory[MemoryConsolidator]
   loop --> cronService[CronService]
   loop --> heartbeat[HeartbeatService]
-  mcpTool --> mcpManager[MCPConnectionManager]
 ```
 
 ## End-to-End User Flow
@@ -47,7 +54,7 @@ flowchart LR
 1. Client sends a request to `POST /v1/chat` (or `/v1/chat/stream`).
 2. API forwards the request to `AgentLoop.process()`.
 3. `AgentLoop` loads session history, runtime context, memory, bootstrap docs, and skill summaries.
-4. `AgentRunner` calls the selected provider with tool schemas.
+4. `AgentRunner` calls `GeminiProvider` with sanitized tool schemas.
 5. If model asks for tools, `ToolRegistry` executes tool calls and feeds tool results back to the model.
 6. Loop repeats until final answer or stop condition (`completed`, `max_iterations`, `cancelled`, `error`).
 7. Turn is persisted to session JSONL; memory consolidation may run in background.
@@ -66,7 +73,27 @@ npm install
 
 - Default config path: `~/.fomoagent/config.json`
 - Override config path with: `FOMOAGENT_CONFIG_PATH=/absolute/path/config.json`
-- Set provider keys via config or environment (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `AZURE_OPENAI_API_KEY`).
+- Set Gemini key via config or environment: `GEMINI_API_KEY`.
+
+Minimal config:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "~/.fomoagent/workspace",
+      "model": "gemini/gemini-2.0-flash",
+      "provider": "gemini"
+    }
+  },
+  "providers": {
+    "gemini": {
+      "apiKey": "${GEMINI_API_KEY}",
+      "apiBase": null
+    }
+  }
+}
+```
 
 ### 3) Start server
 
@@ -113,14 +140,26 @@ curl -N -X POST http://localhost:18790/v1/chat/stream \
 ## Config Model (Important Sections)
 
 - `agents.defaults`: model defaults, temperature, iteration limit, run timeout, timezone.
-- `providers.*`: provider credentials/endpoints (anthropic, openai, openrouter, azure, etc.).
+- `providers.gemini`: Gemini credentials/endpoint.
 - `gateway`: API bind host/port.
 - `runtime`: concurrency cap (`maxConcurrentRuns`).
 - `tools`: web + exec behavior, workspace restriction.
 - `scheduler`: cron service behavior and persistence limits.
 - `heartbeat`: periodic proactive execution policy.
-- `mcp`: MCP bridge enablement, timeout, server definitions.
 - `retries`: provider retry delays in milliseconds.
+
+## Web Search Support
+
+`web_search` supports:
+
+- `brave` (`BRAVE_API_KEY`)
+- `tavily` (`TAVILY_API_KEY`)
+- `exa` (`EXA_API_KEY`)
+- `perplexity` (`PERPLEXITY_API_KEY`)
+- `duckduckgo` (keyless fallback)
+
+If `tools.web.search.provider` is `auto`, provider selection priority is:
+`brave` -> `tavily` -> `exa` -> `perplexity` -> `duckduckgo`.
 
 ## Runtime Data Written By Agent
 
@@ -137,7 +176,7 @@ Under configured workspace:
 
 ### Root (`fomoagent/`)
 
-- `README.md` - short project README with endpoints, config notes, and parity summary.
+- `README.md` - short project README with endpoints and config notes.
 - `package.json` - Node package metadata, scripts, and dependencies.
 - `package-lock.json` - exact dependency lockfile for reproducible installs.
 
@@ -159,16 +198,14 @@ Under configured workspace:
 
 ### `src/config/`
 
-- `src/config/schema.js` - default configuration object and provider spec catalog.
+- `src/config/schema.js` - default configuration object and Gemini provider spec.
 - `src/config/loader.js` - config file loading/merging, env interpolation/hydration, provider matching, and validation.
 
 ### `src/providers/`
 
 - `src/providers/base.js` - provider abstraction types and retry wrappers.
-- `src/providers/openai-compatible.js` - OpenAI SDK based provider for OpenAI-compatible APIs with tool-call support.
-- `src/providers/anthropic.js` - Anthropic adapter with tool-use mapping.
-- `src/providers/azure-openai.js` - Azure OpenAI adapter on top of OpenAI-compatible provider flow.
-- `src/providers/registry.js` - provider factory/routing that selects the proper adapter from config/model hints.
+- `src/providers/gemini.js` - Gemini provider (OpenAI-compat) with OpenClaw hardening safeguards.
+- `src/providers/registry.js` - provider factory that resolves and instantiates Gemini.
 
 ### `src/tools/`
 
@@ -180,7 +217,6 @@ Under configured workspace:
 - `src/tools/message.js` - message callback tool for intermediate status delivery.
 - `src/tools/cron.js` - tool interface for creating/listing/enabling/disabling/running cron jobs.
 - `src/tools/spawn.js` - tool interface for launching/listing independent background runs.
-- `src/tools/mcp.js` - tool interface for listing MCP servers/tools and invoking MCP tools.
 
 ### `src/cron/`
 
@@ -190,10 +226,6 @@ Under configured workspace:
 ### `src/heartbeat/`
 
 - `src/heartbeat/service.js` - periodic proactive runner driven by `HEARTBEAT.md` with rate limiting and run logs.
-
-### `src/mcp/`
-
-- `src/mcp/connect.js` - MCP connection manager for server/tool discovery and HTTP-based tool call execution.
 
 ### `src/security/`
 
@@ -212,7 +244,7 @@ Under configured workspace:
 - `test/config.test.js` - validates config schema and config validation failures.
 - `test/cron.test.js` - validates cron service lifecycle basics (create/list/disable + persistence path).
 
-## Capability Mapping (Nanobot-style, No Channels)
+## Capability Mapping (API Runtime, No Channels)
 
 - `Core loop parity`: implemented.
 - `Tool registry parity`: implemented.
@@ -221,14 +253,14 @@ Under configured workspace:
 - `Cron parity`: mostly implemented for API runtime use.
 - `Heartbeat parity`: implemented for proactive periodic execution.
 - `Spawn/background parity`: implemented.
-- `MCP parity`: partially implemented (HTTP path in place; stdio pending).
-- `Provider parity`: expanded with Anthropic + Azure + OpenAI-compatible routing.
+- `Web search parity target`: expanded with Brave/Tavily/Exa/Perplexity/DDG.
+- `Provider scope`: Gemini-only.
 - `Channel parity`: intentionally out of scope.
 
 ## Suggested Next Improvements
 
-- Implement MCP stdio transport in `src/mcp/connect.js` for full MCP parity.
-- Add richer tests for streaming, cancellation races, heartbeat decision quality, and MCP edge cases.
+- Add richer tests for Gemini edge cases (tool schema transformations, turn-order replay, custom apiBase variants).
+- Add richer tests for streaming, cancellation races, and heartbeat decision quality.
 - Add OpenAPI spec for API routes and payload contracts.
 - Add structured metrics/logging for production observability.
 
