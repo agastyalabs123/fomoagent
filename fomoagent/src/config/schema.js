@@ -12,7 +12,7 @@ export function defaultConfig() {
     agents: {
       defaults: {
         workspace: '~/.fomoagent/workspace',
-        model: 'gemini/gemini-2.0-flash',
+        model: 'gemini/gemini-2.5-flash-lite',
         provider: 'gemini',
         maxTokens: 8192,
         contextWindowTokens: 65_536,

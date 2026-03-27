@@ -12,13 +12,13 @@ export function createProvider(config) {
 
   if (!match) {
     throw new Error(
-      'No Gemini provider configured. Set GEMINI_API_KEY in config.json or environment.'
+      'No Gemini provider configured. Set GEMINI_API_KEY in config.json or environment variables.'
     );
   }
 
   const { providerConfig, spec } = match;
   const apiBase = providerConfig.apiBase || spec.defaultApiBase;
-  const defaultModel = model || 'gemini/gemini-2.0-flash';
+  const defaultModel = model || 'gemini/gemini-2.5-flash-lite';
   const provider = new GeminiProvider({
     apiKey: providerConfig.apiKey,
     apiBase,

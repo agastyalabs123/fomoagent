@@ -1,48 +1,5 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { LLMProvider, LLMResponse, ToolCallRequest } from './base.js';
-
-// ---------------------------------------------------------------------------
-// Fix 1 — Base URL normalization
-// Ported from openclaw/src/infra/google-api-base-url.ts
-// Gemini rejects bare-hostname URLs and URLs with trailing slashes.
-// ---------------------------------------------------------------------------
-
-const GEMINI_DEFAULT_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_OPENAI_COMPAT_SUFFIX = '/openai/';
-
-function normalizeGeminiBaseUrl(url) {
-  const raw = (url || GEMINI_DEFAULT_BASE).trim().replace(/\/+$/, '');
-  let normalized;
-  try {
-    const parsed = new URL(raw);
-    parsed.hash = '';
-    parsed.search = '';
-    if (
-      parsed.hostname.toLowerCase() === 'generativelanguage.googleapis.com' &&
-      parsed.pathname.replace(/\/+$/, '') === ''
-    ) {
-      parsed.pathname = '/v1beta';
-    }
-    normalized = parsed.toString().replace(/\/+$/, '');
-  } catch {
-    normalized = /^https:\/\/generativelanguage\.googleapis\.com\/?$/i.test(raw)
-      ? GEMINI_DEFAULT_BASE
-      : raw;
-  }
-  // Append the OpenAI-compat suffix so fomoagent talks to the /openai/ endpoint.
-  if (!normalized.endsWith('/openai')) {
-    normalized = normalized + GEMINI_OPENAI_COMPAT_SUFFIX;
-  } else {
-    normalized = normalized + '/';
-  }
-  return normalized;
-}
-
-// ---------------------------------------------------------------------------
-// Fix 2 — Tool schema sanitization
-// Ported from openclaw/src/agents/pi-tools.schema.ts (cleanSchemaForGemini)
-// Gemini returns 400 for tool schemas containing these JSON Schema keywords.
-// ---------------------------------------------------------------------------
 
 const GEMINI_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
   'patternProperties',
@@ -78,22 +35,6 @@ function stripGeminiUnsupportedKeywords(schema) {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// Fix 3 — Turn ordering fix
-// Ported from openclaw/src/agents/pi-embedded-runner/google.ts
-// Gemini rejects a conversation whose first non-system message is assistant.
-// ---------------------------------------------------------------------------
-
-function fixGeminiTurnOrdering(messages) {
-  const firstNonSystem = messages.find((m) => m.role !== 'system');
-  if (!firstNonSystem || firstNonSystem.role !== 'assistant') return messages;
-  return [{ role: 'user', content: '[conversation start]' }, ...messages];
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function shortToolId() {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let id = '';
@@ -105,7 +46,6 @@ function safeJsonParse(str) {
   try { return JSON.parse(str); } catch { return {}; }
 }
 
-/** OpenAI SDK / fetch errors often carry status on `e.status` or nested `error`. */
 function formatGeminiApiError(e) {
   const status = e?.status ?? e?.response?.status;
   const apiMsg =
@@ -127,157 +67,185 @@ function formatGeminiApiError(e) {
   return `Error calling LLM: ${apiMsg}`;
 }
 
-// ---------------------------------------------------------------------------
-// GeminiProvider
-// ---------------------------------------------------------------------------
+function messageContentToText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (part?.type === 'text' ? part.text : ''))
+      .join('');
+  }
+  return '';
+}
+
+function normalizeModelName(model) {
+  return (model || 'gemini-2.5-flash-lite').replace(/^gemini\//, '');
+}
+
+function coerceToolResponsePayload(content) {
+  if (typeof content !== 'string') return { output: content ?? '' };
+  const trimmed = content.trim();
+  if (!trimmed) return { output: '' };
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return { output: content };
+  }
+}
+
+function extractFunctionCalls(response) {
+  const fromHelper = response?.functionCalls?.();
+  if (Array.isArray(fromHelper) && fromHelper.length) return fromHelper;
+  const parts = response?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .map((p) => p?.functionCall)
+    .filter(Boolean);
+}
+
+function mapToolsForGemini(tools) {
+  if (!tools?.length) return undefined;
+  const declarations = tools.map((t) => ({
+    name: t.function?.name,
+    description: t.function?.description,
+    parameters: stripGeminiUnsupportedKeywords(t.function?.parameters || { type: 'object', properties: {} }),
+  }));
+  return [{ functionDeclarations: declarations }];
+}
+
+function mapMessagesToGemini(messages) {
+  const mapped = [];
+  for (const msg of messages || []) {
+    if (!msg || msg.role === 'system') continue;
+    if (msg.role === 'tool') {
+      mapped.push({
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name: msg.name || 'tool',
+            response: coerceToolResponsePayload(msg.content),
+          },
+        }],
+      });
+      continue;
+    }
+
+    const parts = [];
+    const text = messageContentToText(msg.content);
+    if (text) parts.push({ text });
+
+    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        const args = typeof tc?.function?.arguments === 'string'
+          ? safeJsonParse(tc.function.arguments)
+          : tc?.function?.arguments || {};
+        parts.push({
+          functionCall: {
+            name: tc?.function?.name || '',
+            args,
+          },
+        });
+      }
+    }
+
+    if (!parts.length) parts.push({ text: '(empty)' });
+    mapped.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts });
+  }
+
+  if (!mapped.length || mapped[0].role === 'model') {
+    mapped.unshift({ role: 'user', parts: [{ text: '[conversation start]' }] });
+  }
+  return mapped;
+}
 
 export class GeminiProvider extends LLMProvider {
-  constructor({ apiKey, apiBase, defaultModel = 'gemini/gemini-2.0-flash', spec = null } = {}) {
+  constructor({ apiKey, apiBase, defaultModel = 'gemini/gemini-2.5-flash-lite', spec = null } = {}) {
     super({ apiKey, apiBase });
     this.defaultModel = defaultModel;
     this._spec = spec;
+    this._apiKey = apiKey || process.env.GEMINI_API_KEY || '';
 
-    if (apiKey && spec?.envKey) {
-      process.env[spec.envKey] = process.env[spec.envKey] || apiKey;
+    if (this._apiKey && spec?.envKey) {
+      process.env[spec.envKey] = process.env[spec.envKey] || this._apiKey;
     }
-
-    // Fix 1: normalize the base URL before passing to the OpenAI client.
-    const effectiveBase = normalizeGeminiBaseUrl(apiBase || spec?.defaultApiBase);
-    this._client = new OpenAI({
-      apiKey: apiKey || 'no-key',
-      baseURL: effectiveBase,
-    });
+    this._client = new GoogleGenerativeAI(this._apiKey);
   }
 
-  _sanitizeMessages(messages) {
-    const ALLOWED = new Set(['role', 'content', 'tool_calls', 'tool_call_id', 'name']);
-
-    // Fix 3: ensure the first non-system message is always from the user.
-    const ordered = fixGeminiTurnOrdering(messages);
-
-    return ordered.map((msg) => {
-      const clean = {};
-      for (const [k, v] of Object.entries(msg)) {
-        if (ALLOWED.has(k)) clean[k] = v;
-      }
-      if (clean.role === 'assistant' && !('content' in clean)) clean.content = null;
-      if (clean.content === '' && clean.role === 'assistant' && clean.tool_calls) clean.content = null;
-      else if (clean.content === '') clean.content = '(empty)';
-      return clean;
-    });
+  _getSystemInstruction(messages) {
+    const parts = (messages || [])
+      .filter((m) => m?.role === 'system' && m.content)
+      .map((m) => messageContentToText(m.content))
+      .filter(Boolean);
+    return parts.length ? parts.join('\n\n') : undefined;
   }
 
-  _buildKwargs({ messages, tools, model, maxTokens, temperature, reasoningEffort }) {
-    const rawModel = model || this.defaultModel;
-    // Gemini OpenAI-compat endpoint expects bare model id, e.g. "gemini-2.0-flash"
-    // Config stores it as "gemini/gemini-2.0-flash" — strip the provider prefix.
-    const resolvedModel = rawModel.replace(/^gemini\//, '');
-    const kwargs = {
-      model: resolvedModel,
-      messages: this._sanitizeMessages(messages),
-      max_tokens: Math.max(1, maxTokens || this.generation.maxTokens),
-      temperature: temperature ?? this.generation.temperature,
-    };
-    if (reasoningEffort) kwargs.reasoning_effort = reasoningEffort;
-    if (tools?.length) {
-      // Fix 2: strip unsupported JSON Schema keywords from tool parameter schemas.
-      kwargs.tools = tools.map((t) => ({
-        ...t,
-        function: {
-          ...t.function,
-          parameters: stripGeminiUnsupportedKeywords(t.function?.parameters),
-        },
-      }));
-      kwargs.tool_choice = 'auto';
-    }
-    return kwargs;
+  _makeModel({ messages, tools, model }) {
+    return this._client.getGenerativeModel({
+      model: normalizeModelName(model || this.defaultModel),
+      systemInstruction: this._getSystemInstruction(messages),
+      tools: mapToolsForGemini(tools),
+    });
   }
 
   _parseResponse(response) {
-    if (!response.choices?.length) {
-      return new LLMResponse({ content: 'Error: API returned empty choices.', finishReason: 'error' });
-    }
-    const choice = response.choices[0];
-    const msg = choice.message;
-    const toolCalls = (msg?.tool_calls || []).map((tc) => {
-      const args = typeof tc.function.arguments === 'string'
-        ? safeJsonParse(tc.function.arguments)
-        : tc.function.arguments || {};
-      return new ToolCallRequest({ id: shortToolId(), name: tc.function.name, arguments: args });
+    const functionCalls = extractFunctionCalls(response);
+    const toolCalls = functionCalls.map((fc) => {
+      const args = typeof fc?.args === 'string' ? safeJsonParse(fc.args) : (fc?.args || {});
+      return new ToolCallRequest({ id: shortToolId(), name: fc?.name || '', arguments: args });
     });
+    const text = (typeof response?.text === 'function' ? response.text() : '') || null;
+    const finish = (response?.candidates?.[0]?.finishReason || 'STOP').toLowerCase();
+    const usageMeta = response?.usageMetadata || {};
     return new LLMResponse({
-      content: msg?.content || null,
+      content: text,
       toolCalls,
-      finishReason: choice.finish_reason || 'stop',
+      finishReason: finish === 'stop' ? 'stop' : finish,
       usage: {
-        prompt_tokens: response.usage?.prompt_tokens || 0,
-        completion_tokens: response.usage?.completion_tokens || 0,
+        prompt_tokens: usageMeta.promptTokenCount || 0,
+        completion_tokens: usageMeta.candidatesTokenCount || 0,
       },
-      reasoningContent: msg?.reasoning_content || null,
+      reasoningContent: null,
     });
   }
 
-  async chat({ messages, tools, model, maxTokens, temperature, reasoningEffort }) {
-    const kwargs = this._buildKwargs({ messages, tools, model, maxTokens, temperature, reasoningEffort });
+  async chat({ messages, tools, model, maxTokens, temperature, reasoningEffort: _reasoningEffort }) {
     try {
-      const response = await this._client.chat.completions.create(kwargs);
-      return this._parseResponse(response);
+      const geminiModel = this._makeModel({ messages, tools, model });
+      const result = await geminiModel.generateContent({
+        contents: mapMessagesToGemini(messages),
+        generationConfig: {
+          maxOutputTokens: Math.max(1, maxTokens || this.generation.maxTokens),
+          temperature: temperature ?? this.generation.temperature,
+        },
+      });
+      return this._parseResponse(result.response);
     } catch (e) {
       return new LLMResponse({ content: formatGeminiApiError(e), finishReason: 'error' });
     }
   }
 
-  async chatStream({ messages, tools, model, maxTokens, temperature, reasoningEffort, onContentDelta }) {
-    const kwargs = this._buildKwargs({ messages, tools, model, maxTokens, temperature, reasoningEffort });
-    kwargs.stream = true;
+  async chatStream({ messages, tools, model, maxTokens, temperature, reasoningEffort: _reasoningEffort, onContentDelta }) {
     try {
-      const stream = await this._client.chat.completions.create(kwargs);
-      const contentParts = [];
-      const tcBufs = new Map();
-      let finishReason = 'stop';
-      let usage = {};
-
-      for await (const chunk of stream) {
-        if (chunk.usage) {
-          usage = {
-            prompt_tokens: chunk.usage.prompt_tokens || 0,
-            completion_tokens: chunk.usage.completion_tokens || 0,
-          };
-        }
-        if (!chunk.choices?.length) continue;
-        const choice = chunk.choices[0];
-        if (choice.finish_reason) finishReason = choice.finish_reason;
-        const delta = choice.delta;
-        if (!delta) continue;
-
-        if (delta.content) {
-          contentParts.push(delta.content);
-          if (onContentDelta) await onContentDelta(delta.content);
-        }
-        for (const tc of delta.tool_calls || []) {
-          const idx = tc.index ?? 0;
-          if (!tcBufs.has(idx)) tcBufs.set(idx, { id: '', name: '', arguments: '' });
-          const buf = tcBufs.get(idx);
-          if (tc.id) buf.id = tc.id;
-          if (tc.function?.name) buf.name = tc.function.name;
-          if (tc.function?.arguments) buf.arguments += tc.function.arguments;
-        }
-      }
-
-      const toolCalls = [...tcBufs.values()].map((buf) => new ToolCallRequest({
-        id: buf.id || shortToolId(),
-        name: buf.name,
-        arguments: buf.arguments ? safeJsonParse(buf.arguments) : {},
-      }));
-
-      return new LLMResponse({
-        content: contentParts.join('') || null,
-        toolCalls,
-        finishReason,
-        usage,
+      const geminiModel = this._makeModel({ messages, tools, model });
+      const streamResult = await geminiModel.generateContentStream({
+        contents: mapMessagesToGemini(messages),
+        generationConfig: {
+          maxOutputTokens: Math.max(1, maxTokens || this.generation.maxTokens),
+          temperature: temperature ?? this.generation.temperature,
+        },
       });
+      for await (const chunk of streamResult.stream) {
+        const delta = typeof chunk?.text === 'function' ? chunk.text() : '';
+        if (delta && onContentDelta) await onContentDelta(delta);
+      }
+      const finalResponse = await streamResult.response;
+      return this._parseResponse(finalResponse);
     } catch (e) {
-      return new LLMResponse({ content: formatGeminiApiError(e), finishReason: 'error' });
+      // Streaming fallback: if native stream fails, retry once with non-stream call contract.
+      const fallback = await this.chat({ messages, tools, model, maxTokens, temperature, reasoningEffort: _reasoningEffort });
+      if (fallback.finishReason === 'error') {
+        return new LLMResponse({ content: formatGeminiApiError(e), finishReason: 'error' });
+      }
+      if (onContentDelta && fallback.content) await onContentDelta(fallback.content);
+      return fallback;
     }
   }
 
