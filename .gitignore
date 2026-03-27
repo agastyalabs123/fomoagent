@@ -20,3 +20,7 @@ bun.lock
 bun.lock.json
 bun.lock.yaml
 bun.lock.json
+
+nanobot
+tinyfish-cookbook
+obsidian-sample-plugin

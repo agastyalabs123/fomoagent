@@ -1,0 +1,25 @@
+{
+  "name": "fomoagent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimal API-only AI agent framework — JS port of nanobot",
+  "main": "src/index.js",
+  "bin": {
+    "fomoagent": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "openai": "^4.73.0",
+    "express": "^5.2.1",
+    "js-tiktoken": "^1.0.15",
+    "js-yaml": "^4.1.0",
+    "commander": "^12.1.0",
+    "dotenv": "^17.3.1"
+  }
+}
