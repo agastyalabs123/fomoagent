@@ -6,7 +6,7 @@ API-first JavaScript agent runtime inspired by `nanobot`, with no channel layer.
 
 - API-only runtime (no Telegram/Slack/Discord channel framework).
 - Tool-calling agent loop with sessions, memory consolidation, and skills loading.
-- Scheduler, heartbeat automation, spawn/background tasks, and MCP bridge.
+- Scheduler, heartbeat automation, and spawn/background tasks.
 
 ## Quick Start
 
@@ -39,14 +39,12 @@ npm run dev
   - `tools` (web, exec, workspace restriction)
   - `scheduler` (persistent cron service)
   - `heartbeat` (proactive periodic checks)
-  - `mcp` (MCP server bridge)
   - `providers` (anthropic/openai/openrouter/azure/etc.)
 
 ## Nanobot Parity Matrix (No Channels)
 
 - `Implemented`: core loop, tools registry, sessions, memory, skills loader, API streaming
 - `Implemented`: cron tool + persistent scheduler, spawn/background runs, heartbeat automation
-- `Implemented`: MCP bridge tool (HTTP MCP endpoints; stdio transport pending)
 - `Implemented`: provider routing expansion (OpenAI-compatible + Anthropic + Azure path)
 - `Implemented`: run cancellation, stricter config validation, expanded security guardrails
 - `Not in scope`: channel abstractions, outbound delivery manager, plugin channels

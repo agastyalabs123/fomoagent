@@ -35,10 +35,77 @@ function formatResults(query, items, n) {
   return lines.join('\n');
 }
 
+function autoDetectSearchProvider(config) {
+  const configured = (config?.provider || '').toLowerCase();
+  if (configured && configured !== 'auto') return configured;
+
+  if (config?.apiKey) {
+    // Infer from a single apiKey — user set explicit key without specifying provider
+    // Check env vars in priority order
+  }
+  if (process.env.BRAVE_API_KEY) return 'brave';
+  if (process.env.TAVILY_API_KEY) return 'tavily';
+  if (process.env.EXA_API_KEY) return 'exa';
+  if (process.env.PERPLEXITY_API_KEY) return 'perplexity';
+  return 'duckduckgo';
+}
+
+function decodeDdgHtmlEntities(text) {
+  return text
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'").replace(/&#x2F;/g, '/').replace(/&nbsp;/g, ' ')
+    .replace(/&ndash;/g, '-').replace(/&mdash;/g, '--').replace(/&hellip;/g, '...')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)));
+}
+
+function stripHtmlTags(html) {
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function decodeDdgRedirectUrl(rawUrl) {
+  try {
+    const normalized = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
+    const uddg = new URL(normalized).searchParams.get('uddg');
+    if (uddg) return uddg;
+  } catch { /* keep original */ }
+  return rawUrl;
+}
+
+function isBotChallenge(html) {
+  if (/class="[^"]*\bresult__a\b[^"]*"/i.test(html)) return false;
+  return /g-recaptcha|are you a human|id="challenge-form"|name="challenge"/i.test(html);
+}
+
+function parseDuckDuckGoHtml(html, maxCount) {
+  const results = [];
+  const resultRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__a\b[^"]*")([^>]*)>([\s\S]*?)<\/a>/gi;
+  const nextResultRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__a\b[^"]*")[^>]*>/i;
+  const snippetRegex = /<a\b(?=[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*")[^>]*>([\s\S]*?)<\/a>/i;
+
+  for (const match of html.matchAll(resultRegex)) {
+    if (results.length >= maxCount) break;
+    const rawAttributes = match[1] ?? '';
+    const rawTitle = match[2] ?? '';
+    const rawUrl = (/\bhref="([^"]*)"/i.exec(rawAttributes))?.[1] ?? '';
+    const matchEnd = (match.index ?? 0) + match[0].length;
+    const trailingHtml = html.slice(matchEnd);
+    const nextIdx = trailingHtml.search(nextResultRegex);
+    const scoped = nextIdx >= 0 ? trailingHtml.slice(0, nextIdx) : trailingHtml;
+    const rawSnippet = snippetRegex.exec(scoped)?.[1] ?? '';
+    const title = decodeDdgHtmlEntities(stripHtmlTags(rawTitle));
+    const url = decodeDdgRedirectUrl(decodeDdgHtmlEntities(rawUrl));
+    const snippet = decodeDdgHtmlEntities(stripHtmlTags(rawSnippet));
+    if (title && url) results.push({ title, url, content: snippet });
+  }
+  return results;
+}
+
 export class WebSearchTool extends Tool {
   constructor({ config, proxy } = {}) {
     super();
-    this._config = config || { provider: 'duckduckgo', apiKey: '', maxResults: 5 };
+    this._config = config || { provider: 'auto', apiKey: '', maxResults: 5 };
     this._proxy = proxy;
   }
 
@@ -57,12 +124,13 @@ export class WebSearchTool extends Tool {
 
   async execute({ query, count }) {
     const n = Math.min(Math.max(count || this._config.maxResults || 5, 1), 10);
-    const provider = (this._config.provider || 'brave').toLowerCase();
+    const provider = autoDetectSearchProvider(this._config);
 
     if (provider === 'brave') return this._searchBrave(query, n);
     if (provider === 'tavily') return this._searchTavily(query, n);
-    // Default: try Brave, fallback message
-    return this._searchBrave(query, n);
+    if (provider === 'exa') return this._searchExa(query, n);
+    if (provider === 'perplexity') return this._searchPerplexity(query, n);
+    return this._searchDuckDuckGo(query, n);
   }
 
   async _searchBrave(query, n) {
@@ -100,6 +168,82 @@ export class WebSearchTool extends Tool {
       if (!resp.ok) return `Error: Tavily search failed (${resp.status})`;
       const data = await resp.json();
       return formatResults(query, data.results || [], n);
+    } catch (e) {
+      return `Error: ${e.message}`;
+    }
+  }
+
+  async _searchExa(query, n) {
+    const apiKey = this._config.apiKey || process.env.EXA_API_KEY || '';
+    if (!apiKey) return `Error: EXA_API_KEY not set.`;
+    try {
+      const resp = await fetch('https://api.exa.ai/search', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({ query, numResults: n, type: 'auto', contents: { highlights: true } }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!resp.ok) return `Error: Exa search failed (${resp.status})`;
+      const data = await resp.json();
+      const items = (data.results || []).map(x => {
+        const highlights = Array.isArray(x.highlights) ? x.highlights.filter(Boolean).join(' ') : '';
+        return { title: x.title || '', url: x.url || '', content: highlights || x.summary || '' };
+      });
+      return formatResults(query, items, n);
+    } catch (e) {
+      return `Error: ${e.message}`;
+    }
+  }
+
+  async _searchPerplexity(query, n) {
+    const apiKey = this._config.apiKey || process.env.PERPLEXITY_API_KEY || '';
+    if (!apiKey) return `Error: PERPLEXITY_API_KEY not set.`;
+    try {
+      const resp = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'sonar',
+          messages: [{ role: 'user', content: `Search: ${query}` }],
+          max_tokens: 1024,
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!resp.ok) return `Error: Perplexity search failed (${resp.status})`;
+      const data = await resp.json();
+      const text = data.choices?.[0]?.message?.content || '';
+      const citations = (data.citations || []).slice(0, n).map((url, i) => ({
+        title: `Result ${i + 1}`, url, content: '',
+      }));
+      const summary = text ? `Summary:\n${text}\n\n` : '';
+      return summary + formatResults(query, citations, n);
+    } catch (e) {
+      return `Error: ${e.message}`;
+    }
+  }
+
+  async _searchDuckDuckGo(query, n) {
+    try {
+      const url = new URL('https://html.duckduckgo.com/html');
+      url.searchParams.set('q', query);
+      url.searchParams.set('kp', '-1'); // moderate safe search
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!resp.ok) return `Error: DuckDuckGo search failed (${resp.status})`;
+      const html = await resp.text();
+      if (isBotChallenge(html)) return `Error: DuckDuckGo returned a bot-challenge. Try again later.`;
+      const items = parseDuckDuckGoHtml(html, n);
+      if (!items.length) return `No results for: ${query}`;
+      return formatResults(query, items, n);
     } catch (e) {
       return `Error: ${e.message}`;
     }

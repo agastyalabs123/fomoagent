@@ -13,7 +13,6 @@ import { WebSearchTool, WebFetchTool } from '../tools/web.js';
 import { MessageTool } from '../tools/message.js';
 import { CronTool } from '../tools/cron.js';
 import { SpawnTool } from '../tools/spawn.js';
-import { MCPTool } from '../tools/mcp.js';
 import { SessionManager } from '../session/manager.js';
 
 export class AgentLoop {
@@ -28,7 +27,6 @@ export class AgentLoop {
     restrictToWorkspace = false,
     timezone,
     cronService = null,
-    mcpManager = null,
     heartbeatService = null,
     runTimeoutSeconds = 180,
     maxConcurrentRuns = 8,
@@ -42,7 +40,6 @@ export class AgentLoop {
     this.runTimeoutMs = Math.max(10_000, Number(runTimeoutSeconds || 180) * 1000);
     this.maxConcurrentRuns = Math.max(1, Number(maxConcurrentRuns || 8));
     this.cronService = cronService;
-    this.mcpManager = mcpManager;
     this.heartbeatService = heartbeatService;
 
     this.context = new ContextBuilder(workspace, { timezone });
@@ -101,9 +98,6 @@ export class AgentLoop {
         listRuns: () => this.listBackgroundRuns(),
       })
     );
-    if (this.mcpManager) {
-      this.tools.register(new MCPTool({ manager: this.mcpManager }));
-    }
   }
 
   /**

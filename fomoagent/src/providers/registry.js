@@ -4,9 +4,7 @@
  */
 
 import { matchProvider } from '../config/loader.js';
-import { OpenAICompatibleProvider } from './openai-compatible.js';
-import { AnthropicProvider } from './anthropic.js';
-import { AzureOpenAIProvider } from './azure-openai.js';
+import { GeminiProvider } from './gemini.js';
 
 export function createProvider(config) {
   const model = config.agents?.defaults?.model;
@@ -14,42 +12,19 @@ export function createProvider(config) {
 
   if (!match) {
     throw new Error(
-      'No LLM provider configured. Set an API key in config.json or environment variables.\n' +
-      'Example: ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, etc.'
+      'No Gemini provider configured. Set GEMINI_API_KEY in config.json or environment.'
     );
   }
 
   const { providerConfig, spec } = match;
-  const apiBase = providerConfig.apiBase || spec.defaultApiBase || undefined;
-
-  // Strip "provider/" prefix from model name to get bare model
-  let defaultModel = model || 'gpt-4o';
-  if (defaultModel.includes('/')) {
-    // Keep the full model for the provider to decide
-  }
-
-  let provider;
-  if (spec.name === 'anthropic') {
-    provider = new AnthropicProvider({
-      apiKey: providerConfig.apiKey,
-      defaultModel,
-    });
-  } else if (spec.name === 'azure') {
-    provider = new AzureOpenAIProvider({
-      apiKey: providerConfig.apiKey,
-      apiBase: providerConfig.apiBase,
-      deployment: providerConfig.deployment || defaultModel.split('/').pop(),
-      apiVersion: providerConfig.apiVersion,
-      defaultModel,
-    });
-  } else {
-    provider = new OpenAICompatibleProvider({
-      apiKey: providerConfig.apiKey,
-      apiBase: apiBase,
-      defaultModel,
-      spec,
-    });
-  }
+  const apiBase = providerConfig.apiBase || spec.defaultApiBase;
+  const defaultModel = model || 'gemini/gemini-2.0-flash';
+  const provider = new GeminiProvider({
+    apiKey: providerConfig.apiKey,
+    apiBase,
+    defaultModel,
+    spec,
+  });
 
   // Apply generation defaults from config
   const agentDefaults = config.agents?.defaults || {};

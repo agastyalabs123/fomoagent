@@ -6,7 +6,6 @@ import { AgentLoop } from "./agent/loop.js";
 import { createApiServer } from "./api/server.js";
 import { CronService } from "./cron/service.js";
 import { HeartbeatService } from "./heartbeat/service.js";
-import { MCPConnectionManager } from "./mcp/connect.js";
 
 function bootstrap() {
   const configPath = process.env.FOMOAGENT_CONFIG_PATH;
@@ -15,18 +14,16 @@ function bootstrap() {
   const agentDefaults = config.agents.defaults;
   const workspace = getWorkspacePath(agentDefaults.workspace);
   const provider = createProvider(config);
-  const mcpManager =
-    config.mcp?.enabled ? new MCPConnectionManager({ servers: config.mcp.servers, timeoutSeconds: config.mcp.timeoutSeconds }) : null;
 
   let agentLoop = null;
   const cronService =
     config.scheduler?.enabled
       ? new CronService({
-          workspace,
-          tickSeconds: config.scheduler.tickSeconds,
-          maxRunHistory: config.scheduler.maxRunHistory,
-          onRunJob: ({ sessionId, message }) => agentLoop.startBackgroundRun({ sessionId, message, source: "cron" }),
-        })
+        workspace,
+        tickSeconds: config.scheduler.tickSeconds,
+        maxRunHistory: config.scheduler.maxRunHistory,
+        onRunJob: ({ sessionId, message }) => agentLoop.startBackgroundRun({ sessionId, message, source: "cron" }),
+      })
       : null;
 
   agentLoop = new AgentLoop({
@@ -42,7 +39,6 @@ function bootstrap() {
     runTimeoutSeconds: agentDefaults.runTimeoutSeconds,
     maxConcurrentRuns: config.runtime.maxConcurrentRuns,
     cronService,
-    mcpManager,
   });
 
   if (cronService) cronService.start();
@@ -50,12 +46,12 @@ function bootstrap() {
   const heartbeatService =
     config.heartbeat?.enabled
       ? new HeartbeatService({
-          workspace,
-          intervalMinutes: config.heartbeat.intervalMinutes,
-          maxRunsPerHour: config.heartbeat.maxRunsPerHour,
-          prompt: config.heartbeat.prompt,
-          onRun: ({ sessionId, message }) => agentLoop.startBackgroundRun({ sessionId, message, source: "heartbeat" }),
-        })
+        workspace,
+        intervalMinutes: config.heartbeat.intervalMinutes,
+        maxRunsPerHour: config.heartbeat.maxRunsPerHour,
+        prompt: config.heartbeat.prompt,
+        onRun: ({ sessionId, message }) => agentLoop.startBackgroundRun({ sessionId, message, source: "heartbeat" }),
+      })
       : null;
   if (heartbeatService) {
     agentLoop.heartbeatService = heartbeatService;
