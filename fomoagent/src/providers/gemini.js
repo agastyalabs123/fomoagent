@@ -105,6 +105,28 @@ function safeJsonParse(str) {
   try { return JSON.parse(str); } catch { return {}; }
 }
 
+/** OpenAI SDK / fetch errors often carry status on `e.status` or nested `error`. */
+function formatGeminiApiError(e) {
+  const status = e?.status ?? e?.response?.status;
+  const apiMsg =
+    e?.error?.message ||
+    e?.error?.code ||
+    (typeof e?.message === 'string' ? e.message : null) ||
+    String(e);
+  const hint429 =
+    'Google Gemini rate limit or quota (HTTP 429). Wait 1–2 minutes and retry. ' +
+    'If this persists: enable billing in Google Cloud for the Generative Language API, ' +
+    'check quotas in Google AI Studio, or switch to a model with higher free-tier limits. ' +
+    'See https://ai.google.dev/gemini-api/docs/rate-limits';
+  if (status === 429) {
+    return `Error calling LLM: ${hint429} (${apiMsg})`;
+  }
+  if (status) {
+    return `Error calling LLM: HTTP ${status} — ${apiMsg}`;
+  }
+  return `Error calling LLM: ${apiMsg}`;
+}
+
 // ---------------------------------------------------------------------------
 // GeminiProvider
 // ---------------------------------------------------------------------------
@@ -201,7 +223,7 @@ export class GeminiProvider extends LLMProvider {
       const response = await this._client.chat.completions.create(kwargs);
       return this._parseResponse(response);
     } catch (e) {
-      return new LLMResponse({ content: `Error calling LLM: ${e.message}`, finishReason: 'error' });
+      return new LLMResponse({ content: formatGeminiApiError(e), finishReason: 'error' });
     }
   }
 
@@ -255,7 +277,7 @@ export class GeminiProvider extends LLMProvider {
         usage,
       });
     } catch (e) {
-      return new LLMResponse({ content: `Error calling LLM: ${e.message}`, finishReason: 'error' });
+      return new LLMResponse({ content: formatGeminiApiError(e), finishReason: 'error' });
     }
   }
 

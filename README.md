@@ -195,6 +195,15 @@ curl -N -X POST http://localhost:18790/v1/chat/stream \
   -d '{"sessionId":"api:demo","message":"Research top Solana hackathons"}'
 ```
 
+### Gemini rate limits (HTTP 429)
+
+If you see `LLM transient error ... 429` in the server logs, Google is **rate-limiting** or your **quota** is exhausted for the Generative Language API.
+
+- Wait 1–2 minutes between heavy test runs.
+- Confirm billing and quotas in [Google AI Studio](https://aistudio.google.com/) / [Google Cloud console](https://console.cloud.google.com/) for the Generative Language API.
+- Try a cheaper model in `~/.fomoagent/config.json` (for example `gemini/gemini-2.0-flash` vs larger models) if you hit daily limits.
+- Optional: increase backoff in config under `retries.delaysMs` (defaults are already longer for 429s).
+
 ## API Surface
 
 - `GET /health` - service health.

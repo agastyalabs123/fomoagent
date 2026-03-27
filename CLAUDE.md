@@ -116,13 +116,14 @@ pip install --upgrade openclaw
 ```json
 {
   "providers": {
-    "anthropic": {           // or "openai", "gemini", etc.
+    "anthropic": {
+      // or "openai", "gemini", etc.
       "apiKey": "your-llm-api-key"
     }
   },
   "agents": {
     "defaults": {
-      "model": "anthropic/claude-opus-4-5",  // or "openai/gpt-4o", "gemini/gemini-2.0-flash", etc.
+      "model": "anthropic/claude-opus-4-5", // or "openai/gpt-4o", "gemini/gemini-2.0-flash", etc.
       "workspace": "~/.openclaw/workspace"
     }
   },
@@ -401,13 +402,14 @@ openclaw reads `${VAR}` placeholders from environment automatically.
 ```json
 {
   "providers": {
-    "anthropic": {                              // swap for "openai", "gemini", etc.
-      "apiKey": "${ANTHROPIC_API_KEY}"         // use the matching env var for your provider
+    "anthropic": {
+      // swap for "openai", "gemini", etc.
+      "apiKey": "${ANTHROPIC_API_KEY}" // use the matching env var for your provider
     }
   },
   "agents": {
     "defaults": {
-      "model": "anthropic/claude-opus-4-5",   // e.g. "openai/gpt-4o", "gemini/gemini-2.0-flash"
+      "model": "anthropic/claude-opus-4-5", // e.g. "openai/gpt-4o", "gemini/gemini-2.0-flash"
       "workspace": "/workspace"
     }
   },
@@ -448,7 +450,7 @@ services:
       - .env
 
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}   # replace/add with your provider's key var
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} # replace/add with your provider's key var
       - TINYFISH_API_KEY=${TINYFISH_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
@@ -560,15 +562,15 @@ docker compose up -d
 
 ### Persistence — What Survives Restarts
 
-| Data                          | Location                             | Survives? |
-| ----------------------------- | ------------------------------------ | --------- |
+| Data                          | Location                              | Survives? |
+| ----------------------------- | ------------------------------------- | --------- |
 | MEMORY.md (agent memory)      | `./openclaw-data/workspace/memory/`   | ✅ Yes    |
 | HISTORY.md (conversation log) | `./openclaw-data/workspace/memory/`   | ✅ Yes    |
 | Sessions                      | `./openclaw-data/workspace/sessions/` | ✅ Yes    |
-| Scraped events                | `./workspace/events/`                | ✅ Yes    |
-| Discovered grants             | `./workspace/grants/`                | ✅ Yes    |
-| Skills                        | `./workspace/skills/`                | ✅ Yes    |
-| Config                        | `./config.json`                      | ✅ Yes    |
+| Scraped events                | `./workspace/events/`                 | ✅ Yes    |
+| Discovered grants             | `./workspace/grants/`                 | ✅ Yes    |
+| Skills                        | `./workspace/skills/`                 | ✅ Yes    |
+| Config                        | `./config.json`                       | ✅ Yes    |
 
 ---
 
@@ -584,12 +586,12 @@ docker compose up -d
 
 ### Local vs VPS Comparison
 
-|                       | Local                    | VPS + Docker                           |
-| --------------------- | ------------------------ | -------------------------------------- |
+|                       | Local                     | VPS + Docker                           |
+| --------------------- | ------------------------- | -------------------------------------- |
 | Start                 | `openclaw gateway`        | `docker compose up -d`                 |
 | Config                | `~/.openclaw/config.json` | `./config.json` mounted via volume     |
 | Workspace             | `~/.openclaw/workspace/`  | `./workspace/` mounted to `/workspace` |
-| API keys              | Exported in shell        | Loaded from `.env` file                |
-| Logs                  | Terminal                 | `docker compose logs -f`               |
-| Auto-restart on crash | ❌ No                    | ✅ Yes                                 |
-| Survives VPS reboot   | ❌ No                    | ✅ Yes (with systemctl enable docker)  |
+| API keys              | Exported in shell         | Loaded from `.env` file                |
+| Logs                  | Terminal                  | `docker compose logs -f`               |
+| Auto-restart on crash | ❌ No                     | ✅ Yes                                 |
+| Survives VPS reboot   | ❌ No                     | ✅ Yes (with systemctl enable docker)  |

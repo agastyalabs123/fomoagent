@@ -48,7 +48,8 @@ export function defaultConfig() {
       restrictToWorkspace: false,
     },
     retries: {
-      delaysMs: [1000, 2000, 4000],
+      // Longer backoff helps Gemini 429 (rate limit / quota) — short retries often fail again immediately.
+      delaysMs: [8000, 20000, 60000],
     },
   };
 }

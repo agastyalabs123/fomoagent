@@ -33,7 +33,7 @@ export function createProvider(config) {
     maxTokens: agentDefaults.maxTokens ?? 8192,
     reasoningEffort: agentDefaults.reasoningEffort || null,
   };
-  provider.retryDelaysMs = config.retries?.delaysMs || [1000, 2000, 4000];
+  provider.retryDelaysMs = config.retries?.delaysMs || [8000, 20000, 60000];
 
   return provider;
 }

@@ -34,7 +34,19 @@ export class LLMResponse {
 }
 
 const DEFAULT_RETRY_DELAYS = [1000, 2000, 4000];
-const TRANSIENT_MARKERS = ['429', 'rate limit', '500', '502', '503', '504', 'overloaded', 'timeout', 'timed out'];
+const TRANSIENT_MARKERS = [
+  '429',
+  'rate limit',
+  'resource_exhausted',
+  'resource exhausted',
+  '500',
+  '502',
+  '503',
+  '504',
+  'overloaded',
+  'timeout',
+  'timed out',
+];
 
 function isTransient(content) {
   const lower = (content || '').toLowerCase();
