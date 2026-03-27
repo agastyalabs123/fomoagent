@@ -1,19 +1,32 @@
-import crypto from 'node:crypto';
-import { CronStore } from './store.js';
+/**
+ * CronService — persistent recurring job scheduler.
+ *
+ * Change from previous version:
+ *   New jobs are created with enabled: false by default.
+ *   Jobs only run after the user explicitly enables them via the cron tool
+ *   or the API. This prevents silent background activity the user didn't ask for.
+ */
+
+import crypto from "node:crypto";
+import { CronStore } from "./store.js";
 
 function nowIso() {
   return new Date().toISOString();
 }
 
 function nextRunAt(schedule, from = new Date()) {
-  const s = String(schedule || '').trim().toLowerCase();
-  const m = s.match(/^every\s+(\d+)\s*(second|seconds|minute|minutes|hour|hours)$/);
+  const s = String(schedule || "")
+    .trim()
+    .toLowerCase();
+  const m = s.match(
+    /^every\s+(\d+)\s*(second|seconds|minute|minutes|hour|hours)$/,
+  );
   if (!m) return null;
   const n = Number(m[1]);
   const unit = m[2];
-  const ms = unit.startsWith('second')
-    ? n * 1000
-    : unit.startsWith('minute')
+  const ms = unit.startsWith("second")
+    ? n * 1_000
+    : unit.startsWith("minute")
       ? n * 60_000
       : n * 3_600_000;
   return new Date(from.getTime() + ms).toISOString();
@@ -32,7 +45,10 @@ export class CronService {
 
   start() {
     if (this._timer) return;
-    this._timer = setInterval(() => this._tick().catch(() => {}), this.tickSeconds * 1000);
+    this._timer = setInterval(
+      () => this._tick().catch(() => {}),
+      this.tickSeconds * 1000,
+    );
   }
 
   stop() {
@@ -44,26 +60,39 @@ export class CronService {
     return [...this.jobs];
   }
 
-  addJob({ sessionId = 'api:default', prompt, schedule }) {
-    if (!prompt || !schedule) throw new Error('prompt and schedule are required');
+  /**
+   * Create a new job. Starts DISABLED by default — user must call setEnabled(id, true).
+   * This is intentional: no silent background activity without explicit user consent.
+   */
+  addJob({ sessionId = "api:default", prompt, schedule }) {
+    if (!prompt || !schedule)
+      throw new Error("prompt and schedule are required");
     const nextAt = nextRunAt(schedule);
-    if (!nextAt) throw new Error('Unsupported schedule format. Use "every N minutes/hours/seconds".');
+    if (!nextAt)
+      throw new Error(
+        'Unsupported schedule format. Use "every N minutes/hours/seconds".',
+      );
+
     const job = {
       id: crypto.randomUUID(),
       sessionId,
       prompt,
       schedule,
-      enabled: true,
+      enabled: false, // ← opt-in: must be explicitly enabled by user
       createdAt: nowIso(),
       updatedAt: nowIso(),
-      nextRunAt: nextAt,
+      nextRunAt: null, // set when enabled
       lastRunAt: null,
       runHistory: [],
       lastError: null,
     };
+
     this.jobs.push(job);
     this._persist();
-    return job;
+    return {
+      ...job,
+      note: "Job created but DISABLED. Call enable to activate it.",
+    };
   }
 
   setEnabled(jobId, enabled) {
@@ -71,7 +100,8 @@ export class CronService {
     if (!j) throw new Error(`Job not found: ${jobId}`);
     j.enabled = !!enabled;
     j.updatedAt = nowIso();
-    if (j.enabled && !j.nextRunAt) j.nextRunAt = nextRunAt(j.schedule);
+    // Compute nextRunAt only when enabling
+    if (j.enabled) j.nextRunAt = nextRunAt(j.schedule);
     this._persist();
     return j;
   }
@@ -89,7 +119,7 @@ export class CronService {
       if (!job.enabled || !job.nextRunAt) continue;
       if (this._running.has(job.id)) continue;
       if (new Date(job.nextRunAt).getTime() > now) continue;
-      await this._runSingle(job);
+      this._runSingle(job).catch(() => {});
     }
   }
 
@@ -101,14 +131,14 @@ export class CronService {
       const result = await this.onRunJob({
         sessionId: job.sessionId,
         message: job.prompt,
-        source: 'cron',
+        source: "cron",
       });
       job.lastRunAt = startedAt;
       job.lastError = null;
       job.runHistory.unshift({
         at: startedAt,
         ok: true,
-        stopReason: result?.stopReason || 'completed',
+        stopReason: result?.stopReason || "completed",
       });
     } catch (e) {
       job.lastRunAt = startedAt;

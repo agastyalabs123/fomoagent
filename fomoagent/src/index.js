@@ -5,6 +5,13 @@
 
 export const TINYFISH_EXEC = `
 ## TinyFish Scraping (use exec tool)
+
+**Before running the curl command, always call the message tool with a status update:**
+- Before each site: "🔍 Scraping [site name]..." — one message per site
+- After all scrapes finish, before processing: "⚙️ Processing results..."
+
+This gives the user live feedback while TinyFish runs (15-30 seconds per site).
+
 \`\`\`bash
 curl -N -X POST https://agent.tinyfish.ai/v1/automation/run-sse \\
   -H "X-API-Key: $TINYFISH_API_KEY" \\
@@ -19,9 +26,11 @@ curl -N -X POST https://agent.tinyfish.ai/v1/automation/run-sse \\
         break
       fi
     fi
-done
+  done
 \`\`\`
+
 Run multiple sources in parallel using the spawn tool. Never combine multiple sites into one TinyFish goal.
+After each successful scrape, store the result via: db cache_store (url, goal, result).
 `.trim();
 
 export const WEB3_CONCIERGE = `
@@ -87,6 +96,7 @@ Section B: JSON object exactly in this shape:
 
 **Persistence:**
 - Save event sweeps to workspace/events/YYYY-MM-DD-events.md
+- After extraction, call db events_upsert with the extracted events array
 - Update MEMORY.md section: ## Concierge MVP Memory
 `.trim();
 
