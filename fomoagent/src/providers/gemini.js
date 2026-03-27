@@ -146,8 +146,12 @@ export class GeminiProvider extends LLMProvider {
   }
 
   _buildKwargs({ messages, tools, model, maxTokens, temperature, reasoningEffort }) {
+    const rawModel = model || this.defaultModel;
+    // Gemini OpenAI-compat endpoint expects bare model id, e.g. "gemini-2.0-flash"
+    // Config stores it as "gemini/gemini-2.0-flash" — strip the provider prefix.
+    const resolvedModel = rawModel.replace(/^gemini\//, '');
     const kwargs = {
-      model: model || this.defaultModel,
+      model: resolvedModel,
       messages: this._sanitizeMessages(messages),
       max_tokens: Math.max(1, maxTokens || this.generation.maxTokens),
       temperature: temperature ?? this.generation.temperature,

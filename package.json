@@ -1,20 +1,23 @@
 {
-  "name": "tinyfish2",
-  "version": "1.0.0",
-  "main": "index.js",
+  "name": "fomoagent",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "license": "MIT",
+  "description": "Web3 Alpha Monitor — event concierge powered by fomoagent + TinyFish",
+  "scripts": {
+    "agent": "node fomoagent/src/server.js",
+    "agent:dev": "node --watch fomoagent/src/server.js",
+    "cli": "node cli.js",
+    "test": "node --test fomoagent/test"
+  },
   "dependencies": {
-    "@libsql/client": "^0.17.2",
-    "@prisma/adapter-libsql": "^7.5.0",
-    "@prisma/client": "^7.5.0",
+    "@anthropic-ai/sdk": "^0.54.0",
+    "commander": "^12.1.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "js-tiktoken": "^1.0.15",
+    "js-yaml": "^4.1.0",
     "nodemon": "^3.1.14",
-    "prisma": "^7.5.0"
-  },
-  "scripts": {
-    "dev": "node events.js",
-    "start": "node store-events.js"
+    "openai": "^4.73.0"
   }
 }
