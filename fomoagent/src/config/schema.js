@@ -25,6 +25,9 @@ export function defaultConfig() {
     },
     providers: {
       gemini: { apiKey: '', apiBase: null },
+      // Optional fallback — activated when OPENROUTER_API_KEY env var is set or apiKey is non-empty.
+      // model defaults to 'qwen/qwen-2.5-7b-instruct:free' inside the provider.
+      openrouterFree: { apiKey: '', model: '' },
     },
     gateway: { host: '0.0.0.0', port: 18790 },
     runtime: {

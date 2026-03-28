@@ -16,7 +16,12 @@ function printHelp() {
     console.log('  :session <id>         Switch session ID');
     console.log('  :new                  Reset current session on server');
     console.log('  :status               Show current session status');
-    console.log('  :exit                 Quit\n');
+    console.log('  :cron list            List all cron jobs');
+    console.log('  :cron enable <id>     Enable a cron job');
+    console.log('  :cron disable <id>    Disable a cron job');
+    console.log('  :cron run <id>        Run a cron job immediately');
+    console.log('  :clear, clear, cls    Clear the terminal');
+    console.log('  :exit, exit, quit     Quit\n');
 }
 
 async function postJson(path, body) {
@@ -82,7 +87,18 @@ async function run() {
             const line = (await rl.question('you> ')).trim();
             if (!line) continue;
 
-            if (line === ':exit' || line === ':quit') break;
+            const quit = line.toLowerCase();
+            if (
+                line === ':exit' ||
+                line === ':quit' ||
+                quit === 'exit' ||
+                quit === 'quit'
+            )
+                break;
+            if (line === ':clear' || quit === 'clear' || quit === 'cls') {
+                console.clear();
+                continue;
+            }
             if (line === ':help') {
                 printHelp();
                 continue;
@@ -109,6 +125,49 @@ async function run() {
                 continue;
             }
 
+            if (line.startsWith(':cron')) {
+                const parts = line.split(/\s+/);
+                const sub = parts[1];
+                const id = parts[2];
+
+                if (sub === 'list') {
+                    try {
+                        const jobs = await getJson('/v1/cron/jobs');
+                        if (!jobs.length) { console.log('no cron jobs'); continue; }
+                        for (const j of jobs) {
+                            const status = j.enabled ? 'enabled ' : 'disabled';
+                            console.log(`  [${status}] ${j.id}  "${j.prompt}"  (${j.schedule})`);
+                        }
+                    } catch (err) {
+                        console.log(`error: ${err.message}`);
+                    }
+                } else if (sub === 'enable' && id) {
+                    try {
+                        const j = await postJson(`/v1/cron/jobs/${id}/enable`);
+                        console.log(`enabled: ${j.id} — next run at ${j.nextRunAt}`);
+                    } catch (err) {
+                        console.log(`error: ${err.message}`);
+                    }
+                } else if (sub === 'disable' && id) {
+                    try {
+                        const j = await postJson(`/v1/cron/jobs/${id}/disable`);
+                        console.log(`disabled: ${j.id}`);
+                    } catch (err) {
+                        console.log(`error: ${err.message}`);
+                    }
+                } else if (sub === 'run' && id) {
+                    try {
+                        await postJson(`/v1/cron/jobs/${id}/run`);
+                        console.log(`ran: ${id}`);
+                    } catch (err) {
+                        console.log(`error: ${err.message}`);
+                    }
+                } else {
+                    console.log('usage: :cron list | :cron enable <id> | :cron disable <id> | :cron run <id>');
+                }
+                continue;
+            }
+
             if (line === ':status') {
                 try {
                     const status = await getJson(`/v1/status?session=${encodeURIComponent(sessionId)}`);
@@ -129,6 +188,7 @@ async function run() {
         }
     } finally {
         rl.close();
+        input.destroy();
     }
 
     console.log('bye');
